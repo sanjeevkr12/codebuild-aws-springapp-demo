@@ -38,7 +38,7 @@ phases:
 
   post_build:
     commands:
-      - echo "Pushing Docker image to ECR..."
+      - echo "Pushing Docker image to ECR....."
       - docker push $ECR_URI:$IMAGE_TAG
 
       - echo "Build and push completed"
