@@ -1,12 +1,27 @@
 version: 0.2
 
+env:
+  variables:
+    AWS_DEFAULT_REGION: ap-south-1
+    ECR_REPOSITORY: codebuild-aws-springapp-demo-repo
+    IMAGE_TAG: latest
+
 phases:
   install:
     runtime-versions:
       java: corretto17
+    commands:
+      - echo "Installing Docker..."
+      - nohup dockerd &
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
 
   pre_build:
     commands:
+      - echo "Logging in to Amazon ECR..."
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - ECR_URI=$ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPOSITORY
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+
       - echo "Cleaning project..."
       - mvn clean
 
@@ -15,11 +30,19 @@ phases:
       - echo "Building Spring Boot application..."
       - mvn package -DskipTests
 
+      - echo "Building Docker image..."
+      - docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+
+      - echo "Tagging Docker image..."
+      - docker tag $ECR_REPOSITORY:$IMAGE_TAG $ECR_URI:$IMAGE_TAG
+
   post_build:
     commands:
-      - echo "Build completed"
+      - echo "Pushing Docker image to ECR..."
+      - docker push $ECR_URI:$IMAGE_TAG
+
+      - echo "Build and push completed"
 
 artifacts:
   files:
     - target/*.jar
-  discard-paths: yes
